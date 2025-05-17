@@ -78,14 +78,6 @@ Refer to the code or help output (`python -m bqc_dash --help`) for a full list o
   pytest
   ```
 
-## License
-
-MIT License (add your license here)
-
-## Author
-
-Your Name (<your.email@example.com>)
-
 ## Input Directory Structure
 
 The application expects the following input directory structure:
@@ -115,3 +107,5 @@ my_data/
     └── 67890/
         └── 67890_1.png
 ```
+
+You can use `scripts/make_gifs.py` from [bqc-generator](https://github.com/yohanchatelain/bqc-generator) to generate that directory.
