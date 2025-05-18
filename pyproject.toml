@@ -2,9 +2,7 @@
 name = "bqc_dash"
 version = "0.0.1"
 description = "A Dash-based application for Brain-QC visualization."
-authors = [
-    {name = "Yohan Chatelain", email = "yohan.chatelain@gmail.com"},
-]
+authors = [{ name = "Yohan Chatelain", email = "yohan.chatelain@gmail.com" }]
 requires-python = ">=3.8"
 dependencies = [
     "dash>=2.9.3",
@@ -12,22 +10,20 @@ dependencies = [
     "dash-mantine-components>=0.15.0",
     "dash-extensions>=0.1.9",
     "natsort>=8.2.0",
+    "scandir-rs>=0.1.0",
+    "natsort>=8.0.0",
+    "dash>=2.0.",
+    "dash-bootstrap-components>=1.0.0",
+    "dash-extensions>=0.1.0",
+    "flask>=2.0.0",
 ]
 
 [project.scripts]
 bqc-dash = "bqc_dash.main:main"
 
 [project.optional-dependencies]
-dev = [
-    "pytest>=7.0",
-    "black>=23.0",
-    "flake8>=6.0",
-]
-production = [
-    "gunicorn>=20.1.0",
-    "gevent>=21.12.0",
-    "waitress>=2.1.2",    
-]
+dev = ["pytest>=7.0", "black>=23.0", "flake8>=6.0"]
+production = ["gunicorn>=20.1.0", "gevent>=21.12.0", "waitress>=2.1.2"]
 
 [build-system]
 requires = ["hatchling>=1.0.0"]

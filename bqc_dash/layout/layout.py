@@ -358,7 +358,6 @@ class GifPanel:
 
 
 class InformationPanel:
-
     info_list = dbc.ListGroup(
         [
             get_info_item("Subject ", "subject-label"),
@@ -413,6 +412,8 @@ class KeyboardPanel:
             ),
             get_keyboard_shortcut_item("←", "Previous"),
             get_keyboard_shortcut_item("→", "Navigate images"),
+            get_keyboard_shortcut_item("PageUp", "Previous subject"),
+            get_keyboard_shortcut_item("PageDown", "Next subject"),
             get_keyboard_shortcut_item(["␣", "⏎"], "Toggle rejection status"),
             get_keyboard_shortcut_item("+", "Zoom out"),
             get_keyboard_shortcut_item("-", "Zoom in"),
@@ -525,7 +526,6 @@ class ImageNavPanel:
 
 
 class NavigationPanel:
-
     panel = dbc.Row(
         [
             dbc.Col(InformationPanel.info_list),
@@ -618,6 +618,11 @@ layout_header = dbc.NavbarSimple(
     fluid=True,
 )
 
+preload_component = html.Img(
+    id="next-image-preload",
+    style={"display": "none"},  # Hidden from view
+)
+
 
 layout = dbc.Container(
     [
@@ -683,6 +688,16 @@ layout = dbc.Container(
             id="keybord-listener",
             useCapture=True,
         ),
+        Keyboard(
+            id="next-subject-key",
+            eventProps=["n_keydowns"],
+            captureKeys=["PageDown"],
+        ),
+        Keyboard(
+            id="prev-subject-key",
+            eventProps=["n_keydowns"],
+            captureKeys=["PageUp"],
+        ),
         html.Div(id="init-trigger", style={"display": "none"}),
         dcc.Store(id="session-id-store", data=None, storage_type="session"),
         dcc.Store(id="tab-id-store", data=None, storage_type="session"),
@@ -697,6 +712,8 @@ layout = dbc.Container(
         dcc.Store(id="launch-scan", data=False, storage_type="memory"),
         dcc.Store(id="image-on-right", data=False, storage_type="session"),
         dcc.Store(id="load-checkpoint", data=False, storage_type="memory"),
+        dcc.Store(id="subject-list-store", data=None, storage_type="memory"),
+        dcc.Store(id="current-filter-store", data=None, storage_type="memory"),
         # Interval for updating performance metrics
         dcc.Interval(
             id="metrics-interval", interval=2000, n_intervals=0, disabled=True
@@ -720,6 +737,7 @@ layout = dbc.Container(
         ),
         html.Div(navigation_panel),
         notifications_container,
+        html.Div(preload_component, style={"display": "none"}),
     ],
     fluid=True,
 )

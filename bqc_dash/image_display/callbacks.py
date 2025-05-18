@@ -1,5 +1,6 @@
 import os
-from dash import ctx, Input, Output, State
+from functools import lru_cache
+from dash import Input, Output, State, callback_context
 from dash.exceptions import PreventUpdate
 from flask import send_from_directory, abort
 import traceback
@@ -13,64 +14,33 @@ from bqc_dash.exceptions.callbacks import exception_callback
 from bqc_dash.toaster.callbacks import send_notification, ToastException
 
 
-# GIF route using session
-@server.route("/gifs/<session_id>/<tab_id>/<path:input_dir>/<path:gif_path>")
-def serve_gif(session_id, tab_id, input_dir, gif_path):
-    """Serve GIF file from filesystem using session input_dir"""
-    try:
-        logger.debug(
-            f"Serve GIF route /gifs/{session_id}/{tab_id}/{input_dir}/{gif_path}"
-        )
-        logger.debug(f"Session ID: {session_id}")
-        logger.debug(f"Tab ID: {tab_id}")
-        logger.debug(f"Input directory: {input_dir}")
-        logger.debug(f"Image path: {gif_path}")
+# Add LRU cache for image serving to improve performance
+@lru_cache(maxsize=100)
+def get_image_path(input_dir, img_path):
+    """
+    Get the full path to an image with caching for performance.
+    """
+    if os.path.isabs(img_path):
+        img_path = "." + img_path
 
-        abs_input_dir = os.path.abspath(input_dir)
-
-        # Construct and serve GIF...
-        server_path = os.path.normpath(os.path.join(abs_input_dir, gif_path))
-        server_dir, server_name = os.path.split(server_path)
-
-        # Construct the host path
-        route_path = f"/gifs/{session_id}/{tab_id}/{input_dir}/{gif_path}"
-        host_path = os.path.normpath(route_path)
-
-        if not os.path.exists(server_path) or not os.path.isfile(server_path):
-            abort(404)
-
-        logger.debug(f"Serving GIF: {server_path}")
-        logger.debug(f"Host GIF {host_path}")
-
-        return send_from_directory(server_dir, server_name), host_path
-
-    except Exception as e:
-        logger.error(f"Error serving GIF: {str(e)}")
-        logger.error("\n" + traceback.format_exc())
-        abort(500)
+    # Construct the full path and normalize it
+    full_path = os.path.normpath(os.path.join(input_dir, img_path))
+    return full_path
 
 
-# Get image from cache or load it
+# Modified route with caching
 @server.route("/images/<session_id>/<tab_id>/<path:input_dir>/<path:img_path>")
 def serve_image(session_id, tab_id, input_dir, img_path):
-    """Serve image file from filesystem"""
+    """Serve image file from filesystem with caching"""
     logger.debug(
         f"Serve image route /images/{session_id}/{tab_id}/{input_dir}/{img_path}"
     )
-    logger.debug(f"Session ID: {session_id}")
-    logger.debug(f"Tab ID: {tab_id}")
-    logger.debug(f"Image path: {img_path}")
-    logger.debug(f"Input directory: {input_dir}")
 
     try:
         base_dir = os.path.abspath(input_dir)
 
-        # get relative if absolute path
-        if os.path.isabs(img_path):
-            img_path = "." + img_path
-
-        # Construct the full path and normalize it
-        full_path = os.path.normpath(os.path.join(base_dir, img_path))
+        # Use the cached function to get the full path
+        full_path = get_image_path(base_dir, img_path)
         server_dir, server_name = os.path.split(full_path)
 
         # Security check: ensure the requested file is within the base directory
@@ -98,10 +68,55 @@ def serve_image(session_id, tab_id, input_dir, img_path):
         abort(500)  # Internal server error
 
 
+# Also cache GIF paths
+@lru_cache(maxsize=50)
+def get_cached_gif_path(input_dir, gif_path):
+    """
+    Get the full path to a GIF with caching for performance.
+    """
+    full_path = os.path.normpath(os.path.join(input_dir, gif_path))
+    return full_path
+
+
+# Modified GIF route with caching
+@server.route("/gifs/<session_id>/<tab_id>/<path:input_dir>/<path:gif_path>")
+def serve_gif(session_id, tab_id, input_dir, gif_path):
+    """Serve GIF file from filesystem using session input_dir with caching"""
+    try:
+        logger.debug(
+            f"Serve GIF route /gifs/{session_id}/{tab_id}/{input_dir}/{gif_path}"
+        )
+
+        abs_input_dir = os.path.abspath(input_dir)
+
+        # Use cached function to get the server path
+        server_path = get_cached_gif_path(abs_input_dir, gif_path)
+        server_dir, server_name = os.path.split(server_path)
+
+        # Construct the host path
+        route_path = f"/gifs/{session_id}/{tab_id}/{input_dir}/{gif_path}"
+        host_path = os.path.normpath(route_path)
+
+        if not os.path.exists(server_path) or not os.path.isfile(server_path):
+            abort(404)
+
+        logger.debug(f"Serving GIF: {server_path}")
+        logger.debug(f"Host GIF {host_path}")
+
+        return send_from_directory(server_dir, server_name), host_path
+
+    except Exception as e:
+        logger.error(f"Error serving GIF: {str(e)}")
+        logger.error("\n" + traceback.format_exc())
+        abort(500)
+
+
+# Modified callback to preload next image
 @app.callback(
     [
         Output("image-display", "src"),
         Output("gif-display", "src"),
+        Output("next-image-preload", "src"),  # Add preload output
         Output("toast-store", "data", allow_duplicate=True),
     ],
     [Input("current-index-store", "data")],
@@ -116,7 +131,7 @@ def serve_image(session_id, tab_id, input_dir, img_path):
     on_error=exception_callback,
 )
 def load_images(current_index, images_path, input_dir, session_id, tab_id, toast_data):
-    """Load image and GIF sources based on current index"""
+    """Load image and GIF sources based on current index with preloading for next image"""
     logger.debug("Start load_images")
     # Skip if no images are loaded
     if (
@@ -156,8 +171,22 @@ def load_images(current_index, images_path, input_dir, session_id, tab_id, toast
             logger.error(f"Error loading GIF: {response_gif.status_code}")
             gif_src = ""
 
+        # Preload next image if available
+        next_img_src = ""
+        if current_index + 1 < len(images_path):
+            next_image_path = images_path[current_index + 1]
+            try:
+                _, next_img_src = serve_image(
+                    session_id, tab_id, input_dir, next_image_path
+                )
+            except Exception as e:
+                logger.warning(f"Error preloading next image: {str(e)}")
+                # Don't let preload errors affect main loading
+                next_img_src = ""
+
         logger.debug(f"Host image: {img_src}")
         logger.debug(f"Host gif: {gif_src}")
+        logger.debug(f"Preload next: {next_img_src}")
     except Exception as e:
         toast = send_notification(
             str(e),
@@ -166,7 +195,20 @@ def load_images(current_index, images_path, input_dir, session_id, tab_id, toast
         )(toast_data)
         raise ToastException(toast) from e
 
-    return img_src, gif_src, dash.no_update
+    return img_src, gif_src, next_img_src, dash.no_update
+
+
+# Toggle subject navigation panel
+@app.callback(
+    Output("subject-nav-collapse", "is_open"),
+    [Input("subject-nav-toggle", "value")],
+    prevent_initial_call=True,
+)
+def toggle_subject_nav_panel(show_panel):
+    """Toggle the visibility of the subject navigation panel"""
+    status = "on" if show_panel else "off"
+    logger.debug(f"Toggle {status} subject navigation panel")
+    return show_panel
 
 
 @app.callback(
